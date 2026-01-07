@@ -40,7 +40,7 @@ class FlanT5SLT(AbstractSLT):
         fusion_mode: str = 'joint',
         inter_hidden: int = 768,
         max_frame_len: int = 1024,
-        max_txt_len: int = 64,
+        max_txt_len: int = 40,
         cross_modal_align: bool = False,
         warm_up_steps: Optional[int] = None,
         combined_loss: bool = False,
@@ -204,6 +204,7 @@ class FlanT5SLT(AbstractSLT):
         input_tokens = self.t5_tokenizer(
             prompts,
             padding="longest",
+            max_length=self.max_txt_len,
             truncation=True,
             return_tensors="pt",
         ).to(self.device)
@@ -346,9 +347,12 @@ class FlanT5SLT(AbstractSLT):
                 langs.append(sample['lang'])
                 
                 _ex_lang_trans = [
-                    f"{sample['en_text']}={sample['text']}",
-                    f"{sample['fr_text']}={sample['text']}",
-                    f"{sample['es_text']}={sample['text']}"
+                    #f"{sample['en_text']}={sample['text']}",
+                    #f"{sample['fr_text']}={sample['text']}",
+                    #f"{sample['es_text']}={sample['text']}",
+                    f"{sample['ur_text']}={sample['text']}",
+                    f"{sample['ar_text']}={sample['text']}",
+                    f"{sample['ps_text']}={sample['text']}"
                 ]
                 _ex_lang_trans = _ex_lang_trans[:self.num_in_context]
                 ex_lang_translations.append(' '.join(_ex_lang_trans))
