@@ -32,6 +32,7 @@ class DataModuleFromConfig(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
+            drop_last=True,
             # collate_fn=BaseFeeder.collate_fn if self.use_collate else None
             collate_fn=self.datasets['train'].collate_fn
         )
@@ -42,6 +43,7 @@ class DataModuleFromConfig(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            drop_last = True,
             # collate_fn=BaseFeeder.collate_fn if self.use_collate else None,
             collate_fn=self.datasets['valid'].collate_fn
         )
