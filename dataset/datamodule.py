@@ -33,6 +33,10 @@ class DataModuleFromConfig(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=True,
             drop_last=True,
+            pin_memory = True,    
+            persistent_workers=True,                 # don’t respawn each epoch
+            prefetch_factor=4,
+            timeout=120,   
             # collate_fn=BaseFeeder.collate_fn if self.use_collate else None
             collate_fn=self.datasets['train'].collate_fn
         )
