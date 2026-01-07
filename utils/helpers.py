@@ -5,14 +5,25 @@ import os
 import glob
 import av
 
+#def derangement(lst):
+#    assert len(lst) > 1, "List must have at least two elements."
+    
+#    while True:
+#        shuffled = lst[:]
+#        random.shuffle(shuffled)
+#       if all(original != shuffled[i] for i, original in enumerate(lst)):
+#            return shuffled
+
+
 def derangement(lst):
     assert len(lst) > 1, "List must have at least two elements."
     
+    indices = list(range(len(lst)))
     while True:
-        shuffled = lst[:]
-        random.shuffle(shuffled)
-        if all(original != shuffled[i] for i, original in enumerate(lst)):
-            return shuffled
+        deranged = indices[:]
+        random.shuffle(deranged)
+        if all(i != deranged[i] for i in indices):
+            return [lst[i] for i in deranged]
 
 
 def normalize(x):
