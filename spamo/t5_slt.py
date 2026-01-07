@@ -8,8 +8,7 @@ from typing import Dict, List, Optional, Tuple, Any
 import torch.nn.functional as F
 
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, T5ForConditionalGeneration
-from transformers import BertConfig, BertModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM #, T5ForConditionalGeneration
 from peft import LoraConfig, get_peft_model, TaskType
 
 from spamo.tconv import TemporalConv
@@ -147,7 +146,7 @@ class FlanT5SLT(AbstractSLT):
         """
         
         # Load the textual model
-        self.t5_model = T5ForConditionalGeneration.from_pretrained(
+        self.t5_model = AutoModelForSeq2SeqLM.from_pretrained(
             t5_model, 
             cache_dir=self.cache_dir,
             torch_dtype=torch.bfloat16, 
@@ -198,7 +197,7 @@ class FlanT5SLT(AbstractSLT):
         prompts = [f'{self.prompt}'] * bs
         prompts = [p.format(l) for p, l in zip(prompts, samples['lang'])]
         
-        if self.use_in_context:
+        if self.use_in_context and split=="train":
             prompts = [f"{p} {c}" for p, c in zip(prompts, samples['ex_lang_trans'])]
         
         # Tokenize prompts
@@ -372,9 +371,9 @@ class FlanT5SLT(AbstractSLT):
                     else:
                         glor_values.append(sample['glor_value'])
                         glor_lengths.append(len(sample['glor_value']))
-        
+
         ex_lang_translations = derangement(ex_lang_translations)
-        
+                
         # Return structured dictionary
         return {
             'pixel_values': pixel_values,
@@ -545,16 +544,16 @@ class FlanT5SLT(AbstractSLT):
             self.references.extend(reference_strings)
             
             # Calculate evaluation metrics
-            # eval_res = evaluate_results(
-            #     predictions=generated_strings,
-            #     references=reference_strings,
-            #     split=split,
-            #     tokenizer='zh' if inputs['lang'][0] == 'Chinese' else '13a',
-            #     device=self.device
-            # )
+            eval_res = evaluate_results(
+                predictions=generated_strings,
+                references=reference_strings,
+                split=split,
+                # tokenizer='zh' if inputs['lang'][0] == 'Chinese' else '13a',
+                device=self.device
+            )
             
             # Add evaluation results to logging
-            # log_dict.update(eval_res)
+            log_dict.update(eval_res)
 
         return loss, log_dict
 
@@ -582,25 +581,37 @@ class FlanT5SLT(AbstractSLT):
 
         self.set_container()
 
+
     def on_test_epoch_end(self) -> None:
-        # Print some examples of generated translations and references with colors
-        print("\n===== Validation Examples =====")
-        for i in range(min(5, len(self.generated))):
-            print(f"\033[94mReference: {self.references[i]}\033[0m")  # Blue color for references
-            print(f"\033[92mGenerated: {self.generated[i]}\033[0m")    # Green color for generated
-            print("-" * 50)
+            # Print some examples of generated translations and references with colors
+            print("\n===== Validation Examples =====")
+            for i in range(min(5, len(self.generated))):
+                print(f"\033[94mReference: {self.references[i]}\033[0m")  # Blue color for references
+                print(f"\033[92mGenerated: {self.generated[i]}\033[0m")    # Green color for generated
+                print("-" * 50)
+                
+            # Calculate evaluation metrics
+            eval_res = evaluate_results(
+                predictions=self.generated,
+                references=self.references,
+                split='test',
+                device=self.device
+            )
+            import pandas as pd
+
+            self.log_dict(eval_res, sync_dist=True)
+            # Save outputs to CSV
+            output_df = pd.DataFrame({
+                "reference": self.references,
+                "generated": self.generated
+            })
+
+            save_dir = os.path.join(self.logger.save_dir, "text")
+            os.makedirs(save_dir, exist_ok=True)
+            output_df.to_csv(os.path.join(save_dir, "test_outputs.csv"), index=False)
+
+            self.set_container()
             
-        # Calculate evaluation metrics
-        eval_res = evaluate_results(
-            predictions=self.generated,
-            references=self.references,
-            split='test',
-            device=self.device
-        )
-
-        self.log_dict(eval_res, sync_dist=True)
-        self.set_container()
-
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.parameters(), 
