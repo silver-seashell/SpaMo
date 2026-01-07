@@ -51,6 +51,9 @@ class Phoenix14T(torch.utils.data.Dataset):
         self.spatial = spatial
         self.spatiotemporal = spatiotemporal
         self.spatial_postfix = spatial_postfix
+        if self.spatial and (self.spatial_postfix is None or self.spatial_postfix.strip() == ''):
+            print("\033[91m[WARNING] Spatial postfix is empty. Did you forget to set `_s2wrapping`?\033[0m")
+
         self.spatiotemporal_postfix = spatiotemporal_postfix
         
         # Validate inputs
@@ -170,7 +173,7 @@ class Phoenix14T(torch.utils.data.Dataset):
             'id': file_id,
             'num_frames': len(pixel_value) if pixel_value is not None else 0,
             'vid_path': str(self.vid_root / 'features' / 'fullFrame-256x256px' / data['folder']),
-            'lang': 'German'
+            'lang': 'Persian'
         }
         
         # Add language texts if available
