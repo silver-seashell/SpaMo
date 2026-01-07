@@ -1,4 +1,5 @@
-from rouge_score import rouge_scorer
+# from rouge_score import rouge_scorer
+from multi_lingual_rouge_score import multi_lingual_rouge
 from sacrebleu.metrics import BLEU, CHRF, TER
 
 
@@ -26,7 +27,10 @@ def evaluate_results(predictions, references, split="train", device='cpu', token
             log_dicts[f"{split}/bleu" + str(i)] = score
 
         # Calculate ROUGE-L score
-        scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+        # scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+        # scorer = multi_lingual_rouge.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+        scorer = multi_lingual_rouge.RougeScorer(['rougeL'], use_stemmer=True)
+
         rouge_scores = [scorer.score(ref, pred)['rougeL'] for ref, pred in zip(references, predictions)]
         
         # Aggregate ROUGE-L scores (average precision, recall, and F1)
