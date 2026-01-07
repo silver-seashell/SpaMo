@@ -8,7 +8,8 @@ import numpy as np
 import torch.nn.functional as F
 from PIL import Image
 from transformers import AutoImageProcessor, CLIPVisionModel
-
+import pandas as pd
+import tarfile
 import sys
 sys.path.append('./')
 
@@ -61,26 +62,33 @@ class ViTFeatureReader(object):
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--anno_root', help='location of tsv files', required=True)
+    # parser.add_argument('--anno_root', help='location of tsv files', required=True)
+    parser.add_argument('--annotation_root', help='location of the dataset csv file', required=True)
     parser.add_argument('--video_root', help='location of tsv files', required=True)
+    parser.add_argument('--dataset_name', help='name of the dataset', default='IRSL-DB')
     parser.add_argument('--device', help='device to use', default='cuda:0')
-    parser.add_argument('--s2_mode', default='')
+    parser.add_argument('--s2_mode', default='s2wrapping')
     parser.add_argument('--scales', nargs='+', type=int, help='List of scales', default=[])
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--nth_layer', type=int, default=-1)
     parser.add_argument('--cache_dir', help='cache dir for model', default=None)
-    
+    parser.add_argument('--mode',nargs='+',choices=['train', 'test', 'dev'],default=['train', 'test', 'dev'],help='Modes to process: can be any combination of train, test, dev')
     parser.add_argument('--save_dir', help='where to save the output', required=True)
     parser.add_argument('--model_name', help='ViT model name', default='openai/clip-vit-large-patch14')
 
     return parser
 
-def get_iterator(args, mode):
+def get_iterator(args, mode, processed_files):
     batch_size = args.batch_size
-    
-    data = np.load(os.path.join(args.anno_root, f'{mode}_info.npy'), allow_pickle=True).item()
-    num = len(data) - 1
-    ds_name = osp.split(args.anno_root)[-1]
+    ds_name = args.dataset_name
+    if ds_name =='IRSL-DB':
+        data = pd.read_csv(osp.join(args.annotation_root,f'{mode}.csv'))
+        num = len(data)
+    else:
+        data = np.load(os.path.join(args.annotation_root, f'{mode}_info.npy'), allow_pickle=True).item()
+        num = len(data) - 1
+
+
     reader = ViTFeatureReader(
         args.model_name, 
         device=args.device, 
@@ -91,10 +99,22 @@ def get_iterator(args, mode):
     )
     
     def iterate():
+        # log_file = osp.join(args.save_dir, f"{os.path.split(args.model_name)[-1]}_feat_{ds_name}", 'dev' if mode=='val' or mode =='validation' else mode, "processed.log")
+        # os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+        # if os.path.exists(log_file):
+        #     with open(log_file,'r') as f:
+        #         processed_files = set(line.strip() for line in f)
+        # else:
+        #     processed_files= set()
+
         for i in range(num):
-            fname = data[i]['folder']
+            
             
             if ds_name == 'Phoenix14T' or ds_name == 'CSL-Daily':
+                fname  = data[i]['folder']
+                if data[i]['fileid'] in processed_files:
+                    continue
                 image_list = get_img_list(ds_name, args.video_root, fname)
                 videos = [Image.open(image).convert('RGB') for image in image_list]
                 
@@ -104,9 +124,32 @@ def get_iterator(args, mode):
                     feats = reader.get_feats(video_batch).cpu().numpy()
                     video_feats.append(feats)
                 
+         
                 yield np.concatenate(video_feats, axis=0), data[i]['fileid'], None
+
+            elif(ds_name == 'IRSL-DB'):
+                fname = data['basename'][i]
+                if fname in processed_files:
+                    continue
+
+                videos = read_video(osp.join(args.video_root,f'{fname}.mp4'))
+                if len(videos) > 0:
+                    video_feats = []
+                    for j in range(0, len(videos), batch_size):
+                        video_batch = videos[j:min(j + batch_size, len(videos))]
+                        feats = reader.get_feats(video_batch).cpu().numpy()
+                        video_feats.append(feats)
+
+                    yield np.concatenate(video_feats, axis=0), fname, None
+
+                else:
+
+                    yield [], fname, None                              
             
             else:
+                fname  = data[i]['folder']
+                if data[i]['fileid'] in processed_files:
+                    continue
                 if ds_name == 'How2Sign':
                     start_time, end_time = data[i]['original_info']['START_REALIGNED'], data[i]['original_info']['END_REALIGNED']
                     videos = read_video(fname, start_time=start_time, end_time=end_time)
@@ -117,26 +160,31 @@ def get_iterator(args, mode):
                         video_batch = videos[j:min(j + batch_size, len(videos))]
                         feats = reader.get_feats(video_batch).cpu().numpy()
                         video_feats.append(feats)
+                    
+
                     yield np.concatenate(video_feats, axis=0), data[i]['fileid'], str(start_time)
                 else:
+
                     yield [], data[i]['fileid'], str(start_time)
     
     return iterate, num
 
 
 def main():
-    mode = ["dev", "test", "train"]
+    parser = get_parser()
+    args = parser.parse_args()
+    mode = args.mode
     for m in mode:
-        parser = get_parser()
-        args = parser.parse_args()
 
-        ds_name = osp.split(args.anno_root)[-1]
+
+
+        ds_name = args.dataset_name
         _model_name = os.path.split(args.model_name)[-1]
         fname = f'{_model_name}_feat_{ds_name}'
         
         os.makedirs(osp.join(args.save_dir, fname, m), exist_ok=True)
     
-        if ds_name == 'How2Sign':
+        if ds_name == 'How2Sign' or ds_name=='IRSL-DB':
             if m == 'dev': _m = 'val'
             else: _m = m
         elif ds_name == 'NIASL2021':
@@ -144,10 +192,17 @@ def main():
         else:
             _m = m
 
-        generator, num = get_iterator(args, _m)
+        log_file = osp.join(args.save_dir, fname,f"log_{m}.txt")
+        if osp.exists(log_file):
+            with open(log_file, 'r') as f:
+                processed_files = set(line.strip() for line in f)
+        else:
+            processed_files = set()
+
+        generator, num = get_iterator(args, _m, processed_files)
         iterator = generator()
 
-        for vit_feat in tqdm.tqdm(iterator, total=num):
+        for vit_feat in tqdm.tqdm(iterator, total=num, initial=len(processed_files)):
             feats, id, st = vit_feat
             save_path = osp.join(args.save_dir, fname, m)
             
@@ -160,6 +215,8 @@ def main():
                 postfix = f'_{st}{postfix}'
             
             np.save(osp.join(save_path, f'{id}{postfix}.npy'), feats)
+            with open(log_file,'a') as f:
+                f.write(f"{id}\n")
 
 
 if __name__ == "__main__":
