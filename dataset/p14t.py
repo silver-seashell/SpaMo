@@ -5,7 +5,9 @@ from typing import Dict, List, Optional, Union, Any, Tuple
 from pathlib import Path
 from spamo.constants import *
 import random
+import logging
 
+logging.basicConfig(filename="loader_debug.log", level= logging.INFO,format="%(asctime)s [%(levelname)s] %(message)s")
 
 class Phoenix14T(torch.utils.data.Dataset):
     """
@@ -98,7 +100,9 @@ class Phoenix14T(torch.utils.data.Dataset):
         feat_path = self.spatial_dir / f"{file_id}{self.spatial_postfix}.npy"
         if not feat_path.exists():
             raise FileNotFoundError(f"Spatial feature file not found: {feat_path}")
-        
+        # arr = np.load(feat_path, mmap_mode="r")   # ← don’t read all into RAM
+        # return torch.from_numpy(arr)              # ← no extra copy
+        logging.info(f"Loading spatial feature {feat_path}") 
         return torch.tensor(np.load(feat_path))
 
     def _load_spatiotemporal_features(self, file_id: str) -> Union[torch.Tensor, List[torch.Tensor]]:
@@ -118,6 +122,9 @@ class Phoenix14T(torch.utils.data.Dataset):
             glor_path = self.spatiotemporal_dir / f"{file_id}{self.spatiotemporal_postfix}.npy"
             if not glor_path.exists():
                 raise FileNotFoundError(f"Spatiotemporal feature file not found: {glor_path}")
+            #arr = np.load(glor_path, mmap_mode="r")
+            #return torch.from_numpy(arr)
+            logging.info(f"Loading spatio-temporal feature: {glor_path}")
             return torch.tensor(np.load(glor_path))
         else:
             # Handle multiple spatiotemporal features
@@ -126,6 +133,9 @@ class Phoenix14T(torch.utils.data.Dataset):
                 path = self.spatiotemporal_dir / f"{file_id}{postfix}.npy"
                 if not path.exists():
                     raise FileNotFoundError(f"Spatiotemporal feature file not found: {path}")
+                #arr = np.load(path, mmap_mode="r")
+                #features.append(torch.from_numpy(arr))
+                logging.info(f"Loading spatio-tempporal features {path}")
                 features.append(torch.tensor(np.load(path)))
             return features
 
@@ -177,7 +187,8 @@ class Phoenix14T(torch.utils.data.Dataset):
         }
         
         # Add language texts if available
-        for lang in ['en', 'es', 'fr']:
+        # for lang in ['en', 'es', 'fr']:
+        for lang in ['ur','ar','ps']:
             if f'{lang}_text' in data:
                 result[f'{lang}_text'] = data[f'{lang}_text']
         
