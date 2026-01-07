@@ -141,6 +141,7 @@ def setup_logging_dirs(opt: argparse.Namespace) -> tuple:
             name = ""
         nowname = now + name + opt.postfix
         logdir = os.path.join(opt.logdir, nowname)
+        os.makedirs(logdir,exist_ok=True)
         ckpt = opt.ckpt
     
     return logdir, ckpt, nowname
